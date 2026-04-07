@@ -1,6 +1,7 @@
 package grade
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -58,7 +59,7 @@ func TestCalculateGrade_TableDriven(t *testing.T) {
 		expected string
 	}{
 		{"Grade A", 80, 70, 90, "A"},
-		{"Grade B", 80, 70, 60, "B"},
+		{"Grade B", 80, 70, 75, "B"},
 		{"Grade C", 70, 60, 65, "C"},
 		{"Grade D", 60, 50, 55, "D"},
 		{"Grade F", 40, 40, 40, "F"},
@@ -72,4 +73,70 @@ func TestCalculateGrade_TableDriven(t *testing.T) {
 			assert.Equal(t, tt.expected, grade)
 		})
 	}
+}
+
+// --------------- Task 5 ----------------------
+type MockRepository struct{}
+
+func (m *MockRepository) GetGradeByStudentID(studentID string) (*Response, error) {
+	if studentID == "error_case" {
+		return nil, errors.New("mock db error")
+	}
+	return &Response{StudentID: studentID, Total: 90, Grade: "A"}, nil
+}
+
+func (m *MockRepository) InsertGrade(g Response, homework, midterm, final float64) error {
+	if g.StudentID == "error_case" {
+		return errors.New("mock insert error")
+	}
+	return nil
+}
+
+func TestCheckGrade(t *testing.T) {
+	mockRepo := &MockRepository{}
+	service := &GradeService{Repo: mockRepo}
+
+	t.Run("Success", func(t *testing.T) {
+		res, err := service.CheckGrade("65001")
+		assert.NoError(t, err)
+		assert.Equal(t, "65001", res.StudentID)
+		assert.Equal(t, "A", res.Grade)
+	})
+
+	t.Run("Empty Student ID", func(t *testing.T) {
+		res, err := service.CheckGrade("")
+		assert.Error(t, err)
+		assert.Equal(t, "student ID is required", err.Error())
+		assert.Nil(t, res)
+	})
+
+	t.Run("Database Error", func(t *testing.T) {
+		res, err := service.CheckGrade("error_case")
+		assert.Error(t, err)
+		assert.Equal(t, "mock db error", err.Error())
+		assert.Nil(t, res)
+	})
+}
+
+func TestSubmitGrade(t *testing.T) {
+	mockRepo := &MockRepository{}
+	service := &GradeService{Repo: mockRepo}
+
+	t.Run("Success", func(t *testing.T) {
+		req := Request{StudentID: "65001", Homework: 80, Midterm: 70, Final: 90}
+		res, err := service.SubmitGrade(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "65001", res.StudentID)
+		assert.Equal(t, "A", res.Grade)
+	})
+
+	t.Run("Insert Error", func(t *testing.T) {
+		req := Request{StudentID: "error_case", Homework: 80, Midterm: 70, Final: 90}
+		res, err := service.SubmitGrade(req)
+
+		assert.Error(t, err)
+		assert.Equal(t, "mock insert error", err.Error())
+		assert.Nil(t, res)
+	})
 }
